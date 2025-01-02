@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전하와 쿨롱 법칙 시뮬레이션</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        .container {
+            width: 80%;
+            max-width: 1000px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .question, .controls, .simulation, .result {
+            margin-bottom: 30px;
+        }
+        .question input {
+            width: 50px;
+            padding: 5px;
+            text-align: center;
+        }
+        .charge {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            position: absolute;
+            cursor: pointer;
+        }
+        .charge.pastel-red {
+            background-color: #FF9F9F;
+        }
+        .charge.pastel-blue {
+            background-color: #9FCFFF;
+        }
+        .charge.pastel-yellow {
+            background-color: #FFFC99;
+        }
+        .charge.pastel-green {
+            background-color: #B8FF9F;
+        }
+        .line {
+            position: relative;
+            height: 1px;
+            background-color: #333;
+        }
+        .line .mark {
+            position: absolute;
+            bottom: 20px;
+            font-size: 12px;
+        }
+        .mark-left {
+            left: 0;
+        }
+        .mark-center {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .mark-right {
+            right: 0;
+        }
+        .charge-label {
+            position: absolute;
+            top: -25px;
+            font-size: 12px;
+        }
+        .button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .button:disabled {
+            background-color: #ccc;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 첫 번째 화면 -->
+    <div class="question">
+        <label for="chargeCount">전하의 개수는 몇개인가요? </label>
+        <input type="number" id="chargeCount" min="1" />
+        <button class="button" id="nextBtn">완료</button>
+    </div>
+
+    <!-- 두 번째 화면 (수평선과 전하 배치) -->
+    <div class="simulation" style="display: none;">
+        <div class="line" id="line" style="position: relative; height: 3px; background-color: #333;">
+            <!-- 수평선 마크 추가 -->
+            <div class="mark" style="left: 0;">-4d</div>
+            <div class="mark" style="left: 12.5%;">-3d</div>
+            <div class="mark" style="left: 25%;">-2d</div>
+            <div class="mark" style="left: 37.5%;">-d</div>
+            <div class="mark" style="left: 50%; transform: translateX(-50%);">0</div>
+            <div class="mark" style="left: 62.5%;">d</div>
+            <div class="mark" style="left: 75%;">2d</div>
+            <div class="mark" style="left: 87.5%;">3d</div>
+            <div class="mark" style="left: 100%; transform: translateX(-100%);">4d</div>
+        </div>
+        <div id="charges"></div>
+        <button class="button" id="completeBtn" disabled>완료</button>
+    </div>
+
+    <!-- 세 번째 화면 (결과) -->
+    <div class="result" style="display: none;">
+        <h3>각 전하의 알짜힘</h3>
+        <div id="forces"></div>
+        <button class="button" id="resetBtn">초기화</button>
+    </div>
+</div>
+
+<script>
+    let chargeCount = 0;
+    let charges = [];
+    let forces = [];
+
+    // 첫 번째 화면에서 전하의 개수를 설정하고 넘어가기
+    document.getElementById('nextBtn').addEventListener('click', () => {
+        chargeCount = parseInt(document.getElementById('chargeCount').value);
+        if (chargeCount && chargeCount > 0) {
+            document.querySelector('.question').style.display = 'none';
+            document.querySelector('.simulation').style.display = 'block';
+            createCharges(chargeCount);
+        } else {
+            alert('전하의 개수를 입력해주세요.');
+        }
+    });
+
+    // 전하 생성 및 배치
+    function createCharges(count) {
+        const chargesContainer = document.getElementById('charges');
+        const line = document.getElementById('line'); // 수평선
+        const lineWidth = line.offsetWidth; // 수평선의 전체 너비
+        const lineCenter = lineWidth / 2; // 수평선의 중심 위치
+        const spacing = lineWidth / (count + 1); // 전하 간 간격 계산
+
+        chargesContainer.innerHTML = ''; // 초기화
+
+        // 전하들이 대칭되게 배치
+        if (count % 2 === 1) {
+            for (let i = 0; i < count; i++) {
+                const charge = document.createElement('div');
+                charge.classList.add('charge');
+                charge.classList.add(getRandomChargeColor()); // 무작위 색상 지정
+
+                // 중앙을 기준으로 대칭적으로 배치
+                charge.style.left = `${lineCenter + (i - Math.floor(count / 2)) * spacing}px`;
+                charge.dataset.index = i;
+
+                // 전하 클릭 시 전하량 및 양/음 선택
+                charge.addEventListener('click', () => {
+                    const chargeType = prompt("전하량을 입력하고, 양전하(+) 또는 음전하(-)를 선택하세요. (예: +1, -2)");
+                    const [sign, magnitude] = chargeType.split(/(\+|\-)/).filter(Boolean);
+                    charges[i] = { chargeElement: charge, magnitude: parseInt(magnitude), sign };
+                    charge.innerHTML = `${charges[i].sign}${charges[i].magnitude}`;
+                    document.getElementById('completeBtn').disabled = false;
+                });
+
+                chargesContainer.appendChild(charge);
+            }
+        } else {
+            const leftCount = count / 2;
+            const rightCount = leftCount - 1; // 오른쪽에 하나 추가
+
+            // 왼쪽 전하 배치
+            for (let i = 0; i < leftCount; i++) {
+                const charge = document.createElement('div');
+                charge.classList.add('charge');
+                charge.classList.add(getRandomChargeColor()); // 무작위 색상 지정
+
+                // 중앙을 기준으로 대칭적으로 배치
+                charge.style.left = `${lineCenter + (i - leftCount + 1) * spacing}px`;
+                charge.dataset.index = i;
+
+                charge.addEventListener('click', () => {
+                    const chargeType = prompt("전하량을 입력하고, 양전하(+) 또는 음전하(-)를 선택하세요. (예: +1, -2)");
+                    const [sign, magnitude] = chargeType.split(/(\+|\-)/).filter(Boolean);
+                    charges[i] = { chargeElement: charge, magnitude: parseInt(magnitude), sign };
+                    charge.innerHTML = `${charges[i].sign}${charges[i].magnitude}`;
+                    document.getElementById('completeBtn').disabled = false;
+                });
+
+                chargesContainer.appendChild(charge);
+            }
+
+            // 오른쪽 전하 배치
+            const extraCharge = document.createElement('div');
+            extraCharge.classList.add('charge');
+            extraCharge.classList.add(getRandomChargeColor());
+            extraCharge.style.left = `${lineCenter + rightCount * spacing}px`;
+            extraCharge.dataset.index = leftCount;
+
+            extraCharge.addEventListener('click', () => {
+                const chargeType = prompt("전하량을 입력하고, 양전하(+) 또는 음전하(-)를 선택하세요. (예: +1, -2)");
+                const [sign, magnitude] = chargeType.split(/(\+|\-)/).filter(Boolean);
+                charges[leftCount] = { chargeElement: extraCharge, magnitude: parseInt(magnitude), sign };
+                extraCharge.innerHTML = `${charges[leftCount].sign}${charges[leftCount].magnitude}`;
+                document.getElementById('completeBtn').disabled = false;
+            });
+
+            chargesContainer.appendChild(extraCharge);
+        }
+    }
+
+    // 무작위 색상 선택
+    function getRandomChargeColor() {
+        const colors = ['pastel-red', 'pastel-blue', 'pastel-yellow', 'pastel-green'];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    // 전하 위치와 전하량을 설정하고 완료하기
+    document.getElementById('completeBtn').addEventListener('click', () => {
+        calculateForces();
+        document.querySelector('.simulation').style.display = 'none';
+        document.querySelector('.result').style.display = 'block';
+    });
+
+    // 전기력 계산 시, 결과 수식으로 표시
+    function calculateForces() {
+        const k = 8.99e9; // 쿨롱 상수
+        forces = [];
+        charges.forEach((charge, i) => {
+            let netForce = 0;
+            let distance;  // 거리 변수 초기화
+
+            charges.forEach((otherCharge, j) => {
+                if (i !== j) {
+                    // 전하들 간의 수평선에서의 거리 계산
+                    distance = Math.abs(parseInt(charge.chargeElement.style.left) - parseInt(otherCharge.chargeElement.style.left));
+
+                    // 전기력 계산 (쿨롱 법칙)
+                    const force = k * charge.magnitude * otherCharge.magnitude / Math.pow(distance, 2);
+                    netForce += force;
+                }
+            });
+
+            forces.push(netForce);
+
+            // 전기력의 방향을 +, -로 표시
+            const forceDirection = netForce > 0 ? '+' : '-';
+
+            // 계산된 값을 수식 형태로 표시: 예: "전하1: + 7 / 4d^2"
+            const forceFormula = `전하${i + 1}: ${forceDirection} ${Math.abs(netForce).toFixed(2)} / ${Math.pow(distance, 2)} d^2`;
+
+            // 결과 화면에 수식 출력
+            const forceDiv = document.createElement('div');
+            forceDiv.innerHTML = forceFormula;
+            document.getElementById('forces').appendChild(forceDiv);
+        });
+    }
+
+    // 초기화
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        location.reload();
+    });
+</script>
+
+</body>
+</html>
